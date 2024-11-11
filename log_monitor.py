@@ -17,9 +17,9 @@ load_dotenv()
 # Configuration from environment variables
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
-FILES_DIRECTORY = os.getenv('FILES_DIRECTORY', '/path/to/files/')
-PROCESSED_DIRECTORY = os.getenv('PROCESSED_DIRECTORY', '/path/to/processed/')
-FAILED_DIRECTORY = os.getenv('FAILED_DIRECTORY', '/path/to/failed/')
+FILES_DIRECTORY = os.getenv('FILES_DIRECTORY', '/home/camera')
+PROCESSED_DIRECTORY = os.getenv('PROCESSED_DIRECTORY', '/home/camera/processed/')
+FAILED_DIRECTORY = os.getenv('FAILED_DIRECTORY', '/home/camera/failed/')
 APP_LOG_FILE = os.getenv('APP_LOG_FILE', 'app.log')
 MAX_RETRIES = int(os.getenv('MAX_RETRIES', 3))
 
