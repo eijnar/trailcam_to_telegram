@@ -78,19 +78,25 @@ def send_file(filepath, file_type, filename):
     """
     try:
         url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/'
+        
         if file_type == 'photo':
             method = 'sendPhoto'
             files = {'photo': open(filepath, 'rb')}
+            data = {
+                'chat_id': TELEGRAM_CHAT_ID
+                # No 'caption' as per your requirement
+            }
         elif file_type == 'video':
             method = 'sendVideo'
             files = {'video': open(filepath, 'rb')}
+            data = {
+                'chat_id': TELEGRAM_CHAT_ID,
+                'width': 1280,   # Static width for trailcam videos
+                'height': 720    # Static height for trailcam videos
+            }
         else:
             logger.warning(f"Unsupported file type for file {filename}. Skipping.")
             return False
-
-        data = {
-            'chat_id': TELEGRAM_CHAT_ID
-        }
 
         response = requests.post(url + method, data=data, files=files, timeout=60)
 
