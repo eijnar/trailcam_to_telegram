@@ -1,16 +1,16 @@
-# log_monitor.py (Updated for Async)
+# file_sender_async.py
 
-import asyncio
 import os
 import re
 import shutil
 import logging
 from logging.handlers import RotatingFileHandler
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
+import asyncio
 from telegram import Bot
 from telegram.error import TelegramError
 from dotenv import load_dotenv
+from datetime import datetime
+import time
 
 # Load environment variables from .env file
 load_dotenv()
@@ -18,13 +18,19 @@ load_dotenv()
 # Configuration from environment variables
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
-LOG_FILE_PATH = os.getenv('LOG_FILE_PATH', '/var/log/vsftpd.log')
 FILES_DIRECTORY = os.getenv('FILES_DIRECTORY', '/path/to/files/')
 PROCESSED_DIRECTORY = os.getenv('PROCESSED_DIRECTORY', '/path/to/processed/')
+FAILED_DIRECTORY = os.getenv('FAILED_DIRECTORY', '/path/to/failed/')
 APP_LOG_FILE = os.getenv('APP_LOG_FILE', 'app.log')
+MAX_RETRIES = int(os.getenv('MAX_RETRIES', 3))
+
+# Ensure directories exist
+os.makedirs(FILES_DIRECTORY, exist_ok=True)
+os.makedirs(PROCESSED_DIRECTORY, exist_ok=True)
+os.makedirs(FAILED_DIRECTORY, exist_ok=True)
 
 # Set up logging
-logger = logging.getLogger('LogMonitor')
+logger = logging.getLogger('FileSenderAsync')
 logger.setLevel(logging.INFO)
 
 # Create a rotating file handler
@@ -34,113 +40,127 @@ handler.setFormatter(formatter)
 
 logger.addHandler(handler)
 
-# Define the pattern to look for in the log
-# Using 'OK UPLOAD:' as the identifier
-UPLOAD_PATTERN = re.compile(r'OK UPLOAD:')
+# Initialize Telegram Bot (Asynchronous)
+bot = Bot(token=TELEGRAM_BOT_TOKEN)
 
-class LogHandler(FileSystemEventHandler):
-    def __init__(self, bot):
-        super().__init__()
-        self.bot = bot
-        self._position = 0
-        # Initialize the position to the end of the file
-        if os.path.exists(LOG_FILE_PATH):
-            with open(LOG_FILE_PATH, 'r') as f:
-                f.seek(0, os.SEEK_END)
-                self._position = f.tell()
-        else:
-            logger.error(f"Log file {LOG_FILE_PATH} does not exist.")
+# Define supported file extensions
+PHOTO_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif']
+VIDEO_EXTENSIONS = ['.mp4', '.avi', '.mov', '.mkv']
 
-    async def on_modified_async(self, event):
-        if event.src_path == LOG_FILE_PATH:
-            try:
-                with open(LOG_FILE_PATH, 'r') as f:
-                    f.seek(self._position)
-                    new_lines = f.readlines()
-                    self._position = f.tell()
-
-                for line in new_lines:
-                    if UPLOAD_PATTERN.search(line):
-                        logger.info(f"Detected upload line: {line.strip()}")
-                        filename = self.extract_filename(line)
-                        if filename:
-                            await self.process_file(filename)
-                        else:
-                            logger.warning(f"Could not extract filename from line: {line.strip()}")
-            except Exception as e:
-                logger.error(f"Error reading log file: {e}")
-
-    def extract_filename(self, log_line):
-        """
-        Extracts the filename from the log line.
-        Example log line:
-        Sun Nov 10 16:02:14 2024 [pid 6] [camera] OK UPLOAD: Client "95.197.192.241", "/home/camera/SYDR2547.MP4", 3184198 bytes, 517.68Kbyte/sec
-        """
-        # Regex to extract the filename between quotes after the client IP
-        match = re.search(r'OK UPLOAD: Client ".*?", "([^"]+)",', log_line)
-        if match:
-            # Extract the base filename
-            filepath = match.group(1)
-            filename = os.path.basename(filepath)
-            return filename
+def get_file_type(filename):
+    _, ext = os.path.splitext(filename.lower())
+    if ext in PHOTO_EXTENSIONS:
+        return 'photo'
+    elif ext in VIDEO_EXTENSIONS:
+        return 'video'
+    else:
         return None
 
-    async def process_file(self, filename):
-        file_path = os.path.join(FILES_DIRECTORY, filename)
-        if not os.path.exists(file_path):
-            logger.error(f"File {file_path} does not exist.")
-            return
+def get_file_timestamp(filepath):
+    """
+    Retrieves the file's modification time.
+    """
+    try:
+        mtime = os.path.getmtime(filepath)
+        return datetime.fromtimestamp(mtime)
+    except Exception as e:
+        logger.error(f"Error getting timestamp for {filepath}: {e}")
+        return None
 
-        # Determine file type
-        _, ext = os.path.splitext(filename.lower())
-        if ext in ['.jpg', '.jpeg', '.png', '.gif']:
-            file_type = 'photo'
-        elif ext in ['.mp4', '.avi', '.mov', '.mkv']:
-            file_type = 'video'
-        else:
-            logger.warning(f"Unsupported file type for file {filename}.")
-            return
-
-        try:
+async def send_file(bot, chat_id, filepath, file_type, filename):
+    """
+    Sends a file via Telegram asynchronously.
+    Returns True if successful, False otherwise.
+    """
+    try:
+        with open(filepath, 'rb') as file:
             if file_type == 'photo':
-                with open(file_path, 'rb') as photo:
-                    await self.bot.send_photo(chat_id=TELEGRAM_CHAT_ID, photo=photo, caption=f"New upload: {filename}")
+                await bot.send_photo(chat_id=chat_id, photo=file, caption=f"New upload: {filename}")
             elif file_type == 'video':
-                with open(file_path, 'rb') as video:
-                    await self.bot.send_video(chat_id=TELEGRAM_CHAT_ID, video=video, caption=f"New upload: {filename}")
+                await bot.send_video(chat_id=chat_id, video=file, caption=f"New upload: {filename}")
+        logger.info(f"Successfully sent {filename} via Telegram.")
+        return True
+    except TelegramError as te:
+        logger.error(f"TelegramError while sending {filename}: {te}")
+    except Exception as e:
+        logger.error(f"Unexpected error while sending {filename}: {e}")
+    return False
 
-            logger.info(f"Successfully sent {filename} via Telegram.")
-            # Move the file to the processed directory
-            destination = os.path.join(PROCESSED_DIRECTORY, filename)
-            shutil.move(file_path, destination)
-            logger.info(f"Moved {filename} to processed directory.")
+def organize_file(filepath, processed=True):
+    """
+    Moves the file to the processed or failed directory, organized by year-month.
+    """
+    timestamp = get_file_timestamp(filepath)
+    if not timestamp:
+        # Use current time if timestamp retrieval failed
+        timestamp = datetime.now()
+    year_month = timestamp.strftime('%Y-%m')
+    if processed:
+        destination_dir = os.path.join(PROCESSED_DIRECTORY, year_month)
+    else:
+        destination_dir = os.path.join(FAILED_DIRECTORY, year_month)
+    os.makedirs(destination_dir, exist_ok=True)
+    destination = os.path.join(destination_dir, os.path.basename(filepath))
+    try:
+        shutil.move(filepath, destination)
+        if processed:
+            logger.info(f"Moved {os.path.basename(filepath)} to {destination_dir}.")
+        else:
+            logger.info(f"Moved {os.path.basename(filepath)} to FAILED directory {destination_dir}.")
+    except Exception as e:
+        logger.error(f"Error moving file {filepath} to {destination}: {e}")
 
-        except TelegramError as e:
-            logger.error(f"Failed to send {filename} via Telegram: {e}")
-            # Optionally, move to a failed directory
-        except Exception as e:
-            logger.error(f"Unexpected error processing {filename}: {e}")
+async def process_file(filepath):
+    """
+    Processes a single file: sends it via Telegram and moves it accordingly.
+    """
+    filename = os.path.basename(filepath)
+    file_type = get_file_type(filename)
+    if not file_type:
+        logger.warning(f"Unsupported file type for file {filename}. Skipping.")
+        return
+
+    retries = 0
+    success = False
+    while retries < MAX_RETRIES and not success:
+        success = await send_file(bot, TELEGRAM_CHAT_ID, filepath, file_type, filename)
+        if not success:
+            retries += 1
+            logger.warning(f"Retrying ({retries}/{MAX_RETRIES}) for file {filename}...")
+            await asyncio.sleep(2)  # Wait before retrying
+
+    if success:
+        organize_file(filepath, processed=True)
+    else:
+        organize_file(filepath, processed=False)
+
+async def scan_and_send():
+    """
+    Scans the FILES_DIRECTORY for files and processes them asynchronously.
+    """
+    try:
+        files = os.listdir(FILES_DIRECTORY)
+        if not files:
+            logger.info("No files to process.")
+            return
+        tasks = []
+        for file in files:
+            filepath = os.path.join(FILES_DIRECTORY, file)
+            if os.path.isfile(filepath):
+                logger.info(f"Processing file: {file}")
+                tasks.append(process_file(filepath))
+        if tasks:
+            await asyncio.gather(*tasks)
+    except Exception as e:
+        logger.error(f"Error scanning directory {FILES_DIRECTORY}: {e}")
 
 async def main():
-    # Initialize Telegram Bot
-    bot = Bot(token=TELEGRAM_BOT_TOKEN)
-    event_handler = LogHandler(bot)
-    observer = Observer()
-    log_dir = os.path.dirname(LOG_FILE_PATH)
-    observer.schedule(event_handler, path=log_dir, recursive=False)
-    observer.start()
-    logger.info(f"Monitoring {LOG_FILE_PATH} for changes...")
-
-    try:
-        while True:
-            await asyncio.sleep(1)
-    except KeyboardInterrupt:
-        observer.stop()
-        logger.info("Stopping log monitor.")
-    except Exception as e:
-        logger.error(f"Error in observer: {e}")
-        observer.stop()
-    observer.join()
+    """
+    Main function to run the file sender application asynchronously.
+    """
+    logger.info("Starting File Sender Async Application.")
+    await scan_and_send()
+    logger.info("File Sender Async Application finished.")
 
 if __name__ == "__main__":
     asyncio.run(main())
