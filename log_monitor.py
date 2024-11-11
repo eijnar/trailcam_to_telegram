@@ -1,5 +1,7 @@
 import re
 import os
+import sys
+import signal
 import shutil
 import logging
 from logging.handlers import RotatingFileHandler
@@ -32,12 +34,18 @@ os.makedirs(FAILED_DIRECTORY, exist_ok=True)
 logger = logging.getLogger('FileSender')
 logger.setLevel(logging.INFO)
 
-# Create a rotating file handler
-handler = RotatingFileHandler(APP_LOG_FILE, maxBytes=5*1024*1024, backupCount=5)
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
+# Create handlers
+file_handler = RotatingFileHandler(APP_LOG_FILE, maxBytes=5*1024*1024, backupCount=5)
+stream_handler = logging.StreamHandler(sys.stdout)
 
-logger.addHandler(handler)
+# Create formatters and add them to handlers
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler.setFormatter(formatter)
+stream_handler.setFormatter(formatter)
+
+# Add handlers to the logger
+logger.addHandler(file_handler)
+logger.addHandler(stream_handler)
 
 # Define supported file extensions
 PHOTO_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif']
@@ -229,6 +237,17 @@ class LogHandler(FileSystemEventHandler):
                             logger.warning(f"Could not extract filename from line: {line.strip()}")
             except Exception as e:
                 logger.error(f"Error processing log file {self.log_file_path}: {e}")
+
+def handle_exit(signum, frame):
+    """
+    Handles graceful shutdown upon receiving termination signals.
+    """
+    logger.info(f"Received signal {signum}. Shutting down gracefully...")
+    sys.exit(0)
+
+# Register signal handlers for graceful shutdown
+signal.signal(signal.SIGTERM, handle_exit)
+signal.signal(signal.SIGINT, handle_exit)
 
 def start_log_monitoring(log_file_path):
     """
