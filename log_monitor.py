@@ -92,6 +92,19 @@ def send_file(filepath, file_type, filename):
         if response.status_code == 200:
             logger.info(f"Successfully sent {filename} via Telegram.")
             return True
+        elif response.status_code == 429:
+            # Handle rate limiting
+            try:
+                response_json = response.json()
+                retry_after = response_json.get('parameters', {}).get('retry_after', 30)
+                logger.error(f"Rate limit exceeded when sending {filename}. "
+                             f"Retrying after {retry_after + 5} seconds.")
+                time.sleep(retry_after + 5)
+            except ValueError:
+                logger.error(f"Rate limit exceeded when sending {filename}, but failed to parse 'retry_after'. "
+                             f"Sleeping for 35 seconds.")
+                time.sleep(35)  # Fallback sleep duration
+            return False
         else:
             logger.error(f"Failed to send {filename}. Status Code: {response.status_code}, Response: {response.text}")
             return False
