@@ -1,13 +1,10 @@
-# file_sender_async.py
+# file_sender.py
 
 import os
-import re
 import shutil
 import logging
 from logging.handlers import RotatingFileHandler
-import asyncio
-from telegram import Bot
-from telegram.error import TelegramError
+import requests
 from dotenv import load_dotenv
 from datetime import datetime
 import time
@@ -30,18 +27,15 @@ os.makedirs(PROCESSED_DIRECTORY, exist_ok=True)
 os.makedirs(FAILED_DIRECTORY, exist_ok=True)
 
 # Set up logging
-logger = logging.getLogger('FileSenderAsync')
+logger = logging.getLogger('FileSender')
 logger.setLevel(logging.INFO)
 
 # Create a rotating file handler
-handler = RotatingFileHandler(APP_LOG_FILE, maxBytes=5*1024*1024, backupCount=2)
+handler = RotatingFileHandler(APP_LOG_FILE, maxBytes=5*1024*1024, backupCount=5)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 
 logger.addHandler(handler)
-
-# Initialize Telegram Bot (Asynchronous)
-bot = Bot(token=TELEGRAM_BOT_TOKEN)
 
 # Define supported file extensions
 PHOTO_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif']
@@ -67,21 +61,42 @@ def get_file_timestamp(filepath):
         logger.error(f"Error getting timestamp for {filepath}: {e}")
         return None
 
-async def send_file(bot, chat_id, filepath, file_type, filename):
+def send_file(filepath, file_type, filename):
     """
-    Sends a file via Telegram asynchronously.
+    Sends a file via Telegram using HTTP requests.
     Returns True if successful, False otherwise.
     """
     try:
-        with open(filepath, 'rb') as file:
-            if file_type == 'photo':
-                await bot.send_photo(chat_id=chat_id, photo=file, caption=f"New upload: {filename}")
-            elif file_type == 'video':
-                await bot.send_video(chat_id=chat_id, video=file, caption=f"New upload: {filename}")
-        logger.info(f"Successfully sent {filename} via Telegram.")
-        return True
-    except TelegramError as te:
-        logger.error(f"TelegramError while sending {filename}: {te}")
+        url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/'
+        if file_type == 'photo':
+            method = 'sendPhoto'
+            files = {'photo': open(filepath, 'rb')}
+        elif file_type == 'video':
+            method = 'sendVideo'
+            files = {'video': open(filepath, 'rb')}
+        else:
+            logger.warning(f"Unsupported file type for file {filename}. Skipping.")
+            return False
+
+        data = {
+            'chat_id': TELEGRAM_CHAT_ID,
+            'caption': f"New upload: {filename}"
+        }
+
+        response = requests.post(url + method, data=data, files=files, timeout=60)
+
+        # Close the file
+        files['photo'].close() if file_type == 'photo' else files['video'].close()
+
+        if response.status_code == 200:
+            logger.info(f"Successfully sent {filename} via Telegram.")
+            return True
+        else:
+            logger.error(f"Failed to send {filename}. Status Code: {response.status_code}, Response: {response.text}")
+            return False
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"RequestException while sending {filename}: {e}")
     except Exception as e:
         logger.error(f"Unexpected error while sending {filename}: {e}")
     return False
@@ -110,7 +125,7 @@ def organize_file(filepath, processed=True):
     except Exception as e:
         logger.error(f"Error moving file {filepath} to {destination}: {e}")
 
-async def process_file(filepath):
+def process_file(filepath):
     """
     Processes a single file: sends it via Telegram and moves it accordingly.
     """
@@ -123,44 +138,45 @@ async def process_file(filepath):
     retries = 0
     success = False
     while retries < MAX_RETRIES and not success:
-        success = await send_file(bot, TELEGRAM_CHAT_ID, filepath, file_type, filename)
+        success = send_file(filepath, file_type, filename)
         if not success:
             retries += 1
             logger.warning(f"Retrying ({retries}/{MAX_RETRIES}) for file {filename}...")
-            await asyncio.sleep(2)  # Wait before retrying
+            time.sleep(2)  # Wait before retrying
 
     if success:
         organize_file(filepath, processed=True)
     else:
         organize_file(filepath, processed=False)
 
-async def scan_and_send():
+def scan_and_send():
     """
-    Scans the FILES_DIRECTORY for files and processes them asynchronously.
+    Scans the FILES_DIRECTORY for files, sorts them from oldest to newest, and processes them.
     """
     try:
         files = os.listdir(FILES_DIRECTORY)
         if not files:
             logger.info("No files to process.")
             return
-        tasks = []
-        for file in files:
+
+        # Sort files by modification time (oldest first)
+        files_sorted = sorted(files, key=lambda x: os.path.getmtime(os.path.join(FILES_DIRECTORY, x)))
+
+        for file in files_sorted:
             filepath = os.path.join(FILES_DIRECTORY, file)
             if os.path.isfile(filepath):
                 logger.info(f"Processing file: {file}")
-                tasks.append(process_file(filepath))
-        if tasks:
-            await asyncio.gather(*tasks)
+                process_file(filepath)
     except Exception as e:
         logger.error(f"Error scanning directory {FILES_DIRECTORY}: {e}")
 
-async def main():
+def main():
     """
-    Main function to run the file sender application asynchronously.
+    Main function to run the file sender application.
     """
-    logger.info("Starting File Sender Async Application.")
-    await scan_and_send()
-    logger.info("File Sender Async Application finished.")
+    logger.info("Starting File Sender Application.")
+    scan_and_send()
+    logger.info("File Sender Application finished.")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
