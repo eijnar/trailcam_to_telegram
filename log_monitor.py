@@ -216,7 +216,7 @@ class LogHandler(FileSystemEventHandler):
             logger.error(f"Log file {self.log_file_path} does not exist.")
 
         # Define the pattern to look for in the log
-        self.upload_pattern = re.compile(r'OK UPLOAD:.*?"([^"]+)"')
+        self.upload_pattern = re.compile(r'OK UPLOAD:.*?"[^"]+",\s*"([^"]+)"')
 
     def on_modified(self, event):
         if event.src_path == self.log_file_path:
