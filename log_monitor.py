@@ -1,5 +1,4 @@
-# file_sender.py
-
+import re
 import os
 import shutil
 import logging
@@ -8,6 +7,8 @@ import requests
 from dotenv import load_dotenv
 from datetime import datetime
 import time
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
 
 # Load environment variables from .env file
 load_dotenv()
@@ -15,6 +16,7 @@ load_dotenv()
 # Configuration from environment variables
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
+LOG_FILE_PATH = os.getenv('LOG_FILE_PATH', '/var/log/vsftpd.log')
 FILES_DIRECTORY = os.getenv('FILES_DIRECTORY', '/path/to/files/')
 PROCESSED_DIRECTORY = os.getenv('PROCESSED_DIRECTORY', '/path/to/processed/')
 FAILED_DIRECTORY = os.getenv('FAILED_DIRECTORY', '/path/to/failed/')
@@ -79,8 +81,7 @@ def send_file(filepath, file_type, filename):
             return False
 
         data = {
-            'chat_id': TELEGRAM_CHAT_ID,
-            'caption': f"New upload: {filename}"
+            'chat_id': TELEGRAM_CHAT_ID
         }
 
         response = requests.post(url + method, data=data, files=files, timeout=60)
@@ -170,13 +171,88 @@ def scan_and_send():
     except Exception as e:
         logger.error(f"Error scanning directory {FILES_DIRECTORY}: {e}")
 
+class LogHandler(FileSystemEventHandler):
+    """
+    Handler for monitoring the vsftpd.log file for new upload entries.
+    """
+
+    def __init__(self, log_file_path):
+        super().__init__()
+        self.log_file_path = log_file_path
+        self._position = 0
+        # Initialize the position to the end of the file
+        if os.path.exists(self.log_file_path):
+            with open(self.log_file_path, 'r') as f:
+                f.seek(0, os.SEEK_END)
+                self._position = f.tell()
+        else:
+            logger.error(f"Log file {self.log_file_path} does not exist.")
+
+        # Define the pattern to look for in the log
+        self.upload_pattern = re.compile(r'OK UPLOAD:.*?"([^"]+)"')
+
+    def on_modified(self, event):
+        if event.src_path == self.log_file_path:
+            try:
+                with open(self.log_file_path, 'r') as f:
+                    f.seek(self._position)
+                    new_lines = f.readlines()
+                    self._position = f.tell()
+
+                for line in new_lines:
+                    if 'OK UPLOAD:' in line:
+                        logger.info(f"Detected upload line: {line.strip()}")
+                        match = self.upload_pattern.search(line)
+                        if match:
+                            filepath = match.group(1)
+                            filename = os.path.basename(filepath)
+                            uploaded_file_path = os.path.join(FILES_DIRECTORY, filename)
+                            if os.path.exists(uploaded_file_path):
+                                logger.info(f"Newly uploaded file detected: {filename}")
+                                process_file(uploaded_file_path)
+                            else:
+                                logger.error(f"Uploaded file {uploaded_file_path} does not exist.")
+                        else:
+                            logger.warning(f"Could not extract filename from line: {line.strip()}")
+            except Exception as e:
+                logger.error(f"Error processing log file {self.log_file_path}: {e}")
+
+def start_log_monitoring(log_file_path):
+    """
+    Starts monitoring the vsftpd.log file for new upload entries.
+    """
+    event_handler = LogHandler(log_file_path)
+    observer = Observer()
+    log_dir = os.path.dirname(log_file_path)
+    observer.schedule(event_handler, path=log_dir, recursive=False)
+    observer.start()
+    logger.info(f"Started monitoring log file: {log_file_path}")
+    return observer
+
 def main():
     """
     Main function to run the file sender application.
     """
     logger.info("Starting File Sender Application.")
+
+    # Initial scan and send
     scan_and_send()
-    logger.info("File Sender Application finished.")
+
+    # Start log monitoring
+    observer = start_log_monitoring(LOG_FILE_PATH)
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        logger.info("Stopping File Sender Application.")
+        observer.stop()
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        observer.stop()
+
+    observer.join()
+    logger.info("File Sender Application stopped.")
 
 if __name__ == "__main__":
     main()
