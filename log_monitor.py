@@ -9,7 +9,7 @@ import requests
 from dotenv import load_dotenv
 from datetime import datetime
 import time
-from watchdog.observers import Observer
+from watchdog.observers.polling import PollingObserver
 from watchdog.events import FileSystemEventHandler
 
 # Load environment variables from .env file
@@ -260,7 +260,7 @@ def start_log_monitoring(log_file_path):
     Starts monitoring the vsftpd.log file for new upload entries.
     """
     event_handler = LogHandler(log_file_path)
-    observer = Observer()
+    observer = PollingObserver()
     log_dir = os.path.dirname(log_file_path)
     observer.schedule(event_handler, path=log_dir, recursive=False)
     observer.start()
