@@ -8,6 +8,11 @@ load_dotenv()
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 
+# Elasticsearch cluster
+ELASTICSEARCH_HOST = os.getenv('ELASTICSEARCH_HOSTS')
+ELASTICSEARCH_INDEX = os.getenv('ELASTICSEARCH_INDEX')
+ELASTICSEARCH_APIKEY = os.getenv('ELASTICSEARCH_APIKEY')
+
 # Log file path
 LOG_FILE_PATH = os.getenv('LOG_FILE_PATH', '/var/log/vsftpd.log')
 

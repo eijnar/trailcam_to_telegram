@@ -1,6 +1,5 @@
 import os
 import re
-import time
 from watchdog.events import FileSystemEventHandler
 from config import FILES_DIRECTORY
 from utils import logger
@@ -9,7 +8,7 @@ from file_processor import process_file
 
 class LogHandler(FileSystemEventHandler):
     """
-    Handler for monitoring the vsftpd.log file for new upload entries.
+    Handler for monitoring the vsftpd.log file for new upload entries and detecting log rotations.
     """
 
     def __init__(self, log_file_path):
@@ -18,12 +17,8 @@ class LogHandler(FileSystemEventHandler):
         self._position = 0
         self._inode = None
         self.file = None
-
-        # Initialize the file and position
+        self._upload_pattern = re.compile(r'OK UPLOAD:.*?"[^"]+",\s*"([^"]+)"')
         self._open_log_file()
-
-        # Define the pattern to look for in the log
-        self.upload_pattern = re.compile(r'OK UPLOAD:.*?"[^"]+",\s*"([^"]+)"')
 
     def _open_log_file(self):
         """Open the log file and initialize the position and inode."""
@@ -49,20 +44,66 @@ class LogHandler(FileSystemEventHandler):
             if self._inode != current_inode:
                 logger.info(
                     f"Log rotation detected for {self.log_file_path}. Inode changed from {self._inode} to {current_inode}.")
+                self._read_remaining_lines()
                 self._reopen_log_file()
         except FileNotFoundError:
             logger.warning(
                 f"Log file {self.log_file_path} not found. It may have been rotated. Reopening...")
+            self._read_remaining_lines()
             self._reopen_log_file()
+        except Exception as e:
+            logger.error(
+                f"Error checking log rotation for {self.log_file_path}: {e}")
+
+    def _read_remaining_lines(self):
+        """Read and process any remaining lines in the current log file before closing it."""
+        if self.file:
+            try:
+                self.file.seek(self._position)
+                new_lines = self.file.readlines()
+                self._position = self.file.tell()
+
+                for line in new_lines:
+                    self._process_upload_line(line)
+            except Exception as e:
+                logger.error(
+                    f"Error reading remaining lines from {self.log_file_path}: {e}")
+            finally:
+                self.file.close()
+                logger.info(
+                    "Closed old log file after reading remaining lines.")
 
     def _reopen_log_file(self):
-        """Close the current file and attempt to reopen the new log file."""
-        if self.file:
-            self.file.close()
-            logger.info("Closed old log file.")
+        """Reopen the new log file and reset position to the beginning."""
         self.file = None
         self._position = 0
         self._open_log_file()
+        if self.file:
+            # Start reading from the beginning of the new log file
+            self.file.seek(0)
+            self._position = 0
+            logger.info(
+                f"Reopened log file {self.log_file_path} and reset position to the beginning.")
+
+    def _process_upload_line(self, line):
+        """Process a single line to check for upload entries and handle them."""
+        if 'OK UPLOAD:' in line:
+            logger.info(f"Detected upload line: {line.strip()}")
+            match = self._upload_pattern.search(line)
+            if match:
+                filepath = match.group(1)
+                filename = os.path.basename(filepath)
+                uploaded_file_path = os.path.join(FILES_DIRECTORY, filename)
+
+                if os.path.exists(uploaded_file_path):
+                    logger.info(f"Newly uploaded file detected: {filename}")
+                    process_file(uploaded_file_path)
+                else:
+                    logger.error(
+                        f"Uploaded file {uploaded_file_path} does not exist.")
+            else:
+                logger.warning(
+                    f"Could not extract filename from line: {line.strip()}")
 
     def on_modified(self, event):
         if event.src_path == self.log_file_path:
@@ -77,25 +118,7 @@ class LogHandler(FileSystemEventHandler):
                 self._position = self.file.tell()
 
                 for line in new_lines:
-                    if 'OK UPLOAD:' in line:
-                        logger.info(f"Detected upload line: {line.strip()}")
-                        match = self.upload_pattern.search(line)
-                        if match:
-                            filepath = match.group(1)
-                            filename = os.path.basename(filepath)
-                            uploaded_file_path = os.path.join(
-                                FILES_DIRECTORY, filename)
-
-                            if os.path.exists(uploaded_file_path):
-                                logger.info(
-                                    f"Newly uploaded file detected: {filename}")
-                                process_file(uploaded_file_path)
-                            else:
-                                logger.error(
-                                    f"Uploaded file {uploaded_file_path} does not exist.")
-                        else:
-                            logger.warning(
-                                f"Could not extract filename from line: {line.strip()}")
+                    self._process_upload_line(line)
             except Exception as e:
                 logger.error(
                     f"Error processing log file {self.log_file_path}: {e}")
@@ -104,7 +127,7 @@ class LogHandler(FileSystemEventHandler):
                     self.file = None
 
     def close(self):
-        """Closes the log file when stopping the observer."""
+        """Close the log file when stopping the observer."""
         if self.file:
             self.file.close()
             logger.info("Closed log file.")
