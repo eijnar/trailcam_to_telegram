@@ -23,7 +23,7 @@ def process_file(filepath):
         logger.warning(f"Unsupported file type for file {filename}. Skipping.")
         return
 
-    if file_type == 'jpg':
+    if file_type in ['photo']:
         # Extract GPS metadata and timestamp for JPG files
         gps_coords = extract_gps(filepath)
         timestamp_taken = extract_timestamp(filepath)
