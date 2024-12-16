@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from PIL import Image
 import piexif
 from utils import logger
@@ -41,22 +41,27 @@ def extract_gps(image_path):
         logger.error(f"Error extracting GPS metadata from {image_path}: {e}")
         return None
 
-def extract_timestamp(image_path):
+def extract_timestamp(filepath):
     """
-    Extracts the timestamp when the picture was taken from an image's EXIF data.
-    Returns a datetime object or None if unavailable.
+    Extracts the timestamp from the image metadata and converts it to UTC.
     """
     try:
-        img = Image.open(image_path)
-        exif_data = piexif.load(img.info.get("exif", b""))
+        img = Image.open(filepath)
+        exif_data = img._getexif()
 
-        timestamp_taken = exif_data.get("Exif", {}).get(piexif.ExifIFD.DateTimeOriginal)
-        if timestamp_taken:
-            return datetime.strptime(timestamp_taken.decode(), "%Y:%m:%d %H:%M:%S")
-        else:
-            logger.info(f"No timestamp found in {image_path}.")
-            return None
+        if exif_data is not None:
+            timestamp_str = exif_data.get(36867)  # 36867 is the DateTimeOriginal tag
+            if timestamp_str:
+                # Parse the local timestamp (assuming the camera stores it in local time)
+                local_timestamp = datetime.strptime(timestamp_str, "%Y:%m:%d %H:%M:%S")
 
+                # Convert local time to UTC
+                local_tz = datetime.now().astimezone().tzinfo  # Get the local timezone
+                local_timestamp = local_tz.localize(local_timestamp)
+                utc_timestamp = local_timestamp.astimezone(timezone.utc)
+
+                return utc_timestamp
     except Exception as e:
-        logger.error(f"Error extracting timestamp from {image_path}: {e}")
-        return None
+        logger.error(f"Error extracting timestamp from {filepath}: {e}")
+
+    return None

@@ -1,6 +1,6 @@
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from utils import logger, get_file_type
 from metadata_extractor import extract_gps, extract_timestamp
 from elasticsearch_client import ingest_metadata
@@ -35,7 +35,7 @@ def process_file(filepath):
 
         # Ensure timestamp_taken has a value
         if not timestamp_taken:
-            timestamp_taken = datetime.utcnow()
+            timestamp_taken = datetime.now(timezone.utc)
 
         # Ingest metadata into Elasticsearch
         ingest_metadata(device_id, gps_coords, timestamp_taken, filename)
