@@ -1,5 +1,6 @@
 import os
-from datetime import datetime, timezone
+from datetime import datetime
+import pytz
 from PIL import Image
 import piexif
 from utils import logger
@@ -56,9 +57,9 @@ def extract_timestamp(filepath):
                 local_timestamp = datetime.strptime(timestamp_str, "%Y:%m:%d %H:%M:%S")
 
                 # Convert local time to UTC
-                local_tz = datetime.now().astimezone().tzinfo  # Get the local timezone
+                local_tz = pytz.timezone('Europe/Stockholm')
                 local_timestamp = local_tz.localize(local_timestamp)
-                utc_timestamp = local_timestamp.astimezone(timezone.utc)
+                utc_timestamp = local_timestamp.astimezone(pytz.utc)
 
                 return utc_timestamp
     except Exception as e:
