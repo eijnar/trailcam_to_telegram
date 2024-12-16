@@ -1,14 +1,14 @@
 from elasticsearch import Elasticsearch
 from datetime import datetime
-from config import ELASTICSEARCH_HOST, ELASTICSEARCH_INDEX, ELASTICSEARCH_APIKEY
+from config import ELASTICSEARCH_HOST, ELASTICSEARCH_INDEX, ELASTICSEARCH_API_KEY_ID, ELASTICSEARCH_API_KEY
 from utils import logger
 
-print(f"Loaded API Key: {ELASTICSEARCH_APIKEY}")
+print(f"Loaded API Key: {ELASTICSEARCH_API_KEY_ID, ELASTICSEARCH_API_KEY}")
 
 # Initialize Elasticsearch client with API key authentication
 es = Elasticsearch(
     hosts=ELASTICSEARCH_HOST,
-    api_key=ELASTICSEARCH_APIKEY
+    api_key=(ELASTICSEARCH_API_KEY_ID, ELASTICSEARCH_API_KEY)
 )
 
 def create_index():
