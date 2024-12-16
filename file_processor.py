@@ -8,6 +8,7 @@ from telegram_client import send_file
 from file_organizer import organize_file
 from config import FILES_DIRECTORY, MAX_RETRIES
 
+
 def process_file(filepath):
     """
     Processes a single file:
@@ -19,12 +20,16 @@ def process_file(filepath):
     device_id = filename.split("-")[0]  # Extract device ID from filename
     file_type = get_file_type(filename)
 
+    logger.debug(f"Processing file: {filename}")
+    logger.debug(f"Detected file type: {file_type}")
+
     if not file_type:
         logger.warning(f"Unsupported file type for file {filename}. Skipping.")
         return
 
     if file_type in ['photo']:
         # Extract GPS metadata and timestamp for JPG files
+        logger.info(f"Extracting metadata for photo file: {filename}")
         gps_coords = extract_gps(filepath)
         timestamp_taken = extract_timestamp(filepath)
 
@@ -38,8 +43,9 @@ def process_file(filepath):
         logger.info(f"Skipping metadata ingestion for video file: {filename}")
     else:
         # This case should not occur due to get_file_type restrictions
-        logger.warning(f"Unhandled file type for file {filename}. Skipping metadata extraction.")
-    
+        logger.warning(
+            f"Unhandled file type for file {filename}. Skipping metadata extraction.")
+
     # Attempt to send the file via Telegram with retries
     retries = 0
     success = False
@@ -47,7 +53,8 @@ def process_file(filepath):
         success = send_file(filepath, file_type, filename)
         if not success:
             retries += 1
-            logger.warning(f"Retrying ({retries}/{MAX_RETRIES}) for file {filename}...")
+            logger.warning(
+                f"Retrying ({retries}/{MAX_RETRIES}) for file {filename}...")
             time.sleep(2)  # Wait before retrying
 
     # Organize the file based on success or failure
@@ -55,6 +62,7 @@ def process_file(filepath):
         organize_file(filepath, processed=True)
     else:
         organize_file(filepath, processed=False)
+
 
 def scan_and_send():
     """
@@ -67,7 +75,8 @@ def scan_and_send():
             return
 
         # Sort files by modification time (oldest first)
-        files_sorted = sorted(files, key=lambda x: os.path.getmtime(os.path.join(FILES_DIRECTORY, x)))
+        files_sorted = sorted(files, key=lambda x: os.path.getmtime(
+            os.path.join(FILES_DIRECTORY, x)))
 
         for file in files_sorted:
             filepath = os.path.join(FILES_DIRECTORY, file)

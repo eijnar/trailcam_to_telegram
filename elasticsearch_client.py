@@ -3,8 +3,6 @@ from datetime import datetime
 from config import ELASTICSEARCH_HOST, ELASTICSEARCH_INDEX, ELASTICSEARCH_APIKEY_ID, ELASTICSEARCH_APIKEY_VALUE
 from utils import logger
 
-print(f"Loaded API Key: {ELASTICSEARCH_APIKEY_ID, ELASTICSEARCH_APIKEY_VALUE}")
-
 # Initialize Elasticsearch client with API key authentication
 es = Elasticsearch(
     hosts=ELASTICSEARCH_HOST,
