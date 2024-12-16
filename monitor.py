@@ -26,7 +26,7 @@ def start_log_monitoring(log_file_path):
     Starts monitoring the vsftpd.log file for new upload entries.
     """
     event_handler = LogHandler(log_file_path)
-    observer = PollingObserver(timeout=5)
+    observer = PollingObserver(timeout=2)
     log_dir = os.path.dirname(log_file_path)
     observer.schedule(event_handler, path=log_dir, recursive=False)
     observer.start()
