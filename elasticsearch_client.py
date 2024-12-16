@@ -5,7 +5,7 @@ from utils import logger
 
 # Initialize Elasticsearch client with API key authentication
 es = Elasticsearch(
-    ELASTICSEARCH_HOST,
+    hosts=ELASTICSEARCH_HOST,
     api_key=ELASTICSEARCH_APIKEY
 )
 
