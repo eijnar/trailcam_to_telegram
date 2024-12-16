@@ -17,7 +17,7 @@ def send_file(filepath, file_type, filename):
     try:
         url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/'
 
-        if file_type == 'photo':
+        if file_type == 'jpg':
             method = 'sendPhoto'
             files = {'photo': open(filepath, 'rb')}
             data = {'chat_id': TELEGRAM_CHAT_ID}
@@ -36,7 +36,7 @@ def send_file(filepath, file_type, filename):
         response = requests.post(url + method, data=data, files=files, timeout=60)
 
         # Close the file
-        files['photo'].close() if file_type == 'jpg' else files['video'].close()
+        files['photo'].close() if file_type == 'photo' else files['video'].close()
 
         if response.status_code == 200:
             logger.info(f"Successfully sent {filename} via Telegram.")
