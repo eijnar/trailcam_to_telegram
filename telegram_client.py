@@ -17,7 +17,7 @@ def send_file(filepath, file_type, filename):
     try:
         url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/'
 
-        if file_type == 'jpg':
+        if file_type == 'photo':
             method = 'sendPhoto'
             files = {'photo': open(filepath, 'rb')}
             data = {'chat_id': TELEGRAM_CHAT_ID}
