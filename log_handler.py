@@ -1,9 +1,11 @@
 import os
 import re
+import time
 from watchdog.events import FileSystemEventHandler
 from config import FILES_DIRECTORY
 from utils import logger
 from file_processor import process_file
+
 
 class LogHandler(FileSystemEventHandler):
     """
@@ -22,19 +24,26 @@ class LogHandler(FileSystemEventHandler):
         # Define the pattern to look for in the log
         self.upload_pattern = re.compile(r'OK UPLOAD:.*?"[^"]+",\s*"([^"]+)"')
 
-    def _open_log_file(self):
-        """Opens the log file and initializes the position to the end."""
-        if os.path.exists(self.log_file_path):
-            try:
-                self.file = open(self.log_file_path, 'r')
-                self.file.seek(0, os.SEEK_END)
-                self._position = self.file.tell()
-                logger.info(f"Opened log file: {self.log_file_path}")
-            except Exception as e:
-                logger.error(f"Error opening log file {self.log_file_path}: {e}")
-                self.file = None
-        else:
-            logger.error(f"Log file {self.log_file_path} does not exist.")
+    def _open_log_file(self, retries=3, delay=5):
+        """Opens the log file and retries if the file is unavailable."""
+        for attempt in range(retries):
+            if os.path.exists(self.log_file_path):
+                try:
+                    self.file = open(self.log_file_path, 'r')
+                    self.file.seek(0, os.SEEK_END)
+                    self._position = self.file.tell()
+                    logger.info(f"Opened log file: {self.log_file_path}")
+                    return
+                except Exception as e:
+                    logger.error(
+                        f"Error opening log file {self.log_file_path}: {e}")
+            else:
+                logger.warning(
+                    f"Log file {self.log_file_path} not found. Retrying in {delay} seconds...")
+                time.sleep(delay)
+        logger.error(
+            f"Failed to open log file {self.log_file_path} after {retries} attempts.")
+        self.file = None
 
     def on_modified(self, event):
         if event.src_path == self.log_file_path:
@@ -57,17 +66,22 @@ class LogHandler(FileSystemEventHandler):
                         if match:
                             filepath = match.group(1)
                             filename = os.path.basename(filepath)
-                            uploaded_file_path = os.path.join(FILES_DIRECTORY, filename)
+                            uploaded_file_path = os.path.join(
+                                FILES_DIRECTORY, filename)
 
                             if os.path.exists(uploaded_file_path):
-                                logger.info(f"Newly uploaded file detected: {filename}")
+                                logger.info(
+                                    f"Newly uploaded file detected: {filename}")
                                 process_file(uploaded_file_path)
                             else:
-                                logger.error(f"Uploaded file {uploaded_file_path} does not exist.")
+                                logger.error(
+                                    f"Uploaded file {uploaded_file_path} does not exist.")
                         else:
-                            logger.warning(f"Could not extract filename from line: {line.strip()}")
+                            logger.warning(
+                                f"Could not extract filename from line: {line.strip()}")
             except Exception as e:
-                logger.error(f"Error processing log file {self.log_file_path}: {e}")
+                logger.error(
+                    f"Error processing log file {self.log_file_path}: {e}")
                 # Close the file on error to trigger reopening on the next modification
                 if self.file:
                     self.file.close()
