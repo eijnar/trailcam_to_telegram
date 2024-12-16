@@ -6,10 +6,12 @@ from config import APP_LOG_FILE, PHOTO_EXTENSIONS, VIDEO_EXTENSIONS, LOG_LEVEL
 
 # Set up logging
 logger = logging.getLogger('FileSender')
-logger.setLevel(logging.LOG_LEVEL)
+numeric_log_level = getattr(logging, LOG_LEVEL, logging.INFO)
+logger.setLevel(numeric_log_level)
 
 # Create handlers
-file_handler = RotatingFileHandler(APP_LOG_FILE, maxBytes=5*1024*1024, backupCount=5)
+file_handler = RotatingFileHandler(
+    APP_LOG_FILE, maxBytes=5*1024*1024, backupCount=5)
 stream_handler = logging.StreamHandler(sys.stdout)
 
 # Create formatters and add them to handlers
@@ -20,6 +22,7 @@ stream_handler.setFormatter(formatter)
 # Add handlers to the logger
 logger.addHandler(file_handler)
 logger.addHandler(stream_handler)
+
 
 def get_file_type(filename):
     _, ext = os.path.splitext(filename.lower())
