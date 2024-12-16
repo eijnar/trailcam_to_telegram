@@ -30,7 +30,7 @@ def send_file(filepath, file_type, filename):
                 'height': 720    # Static height for trailcam videos
             }
         else:
-            logger.warning(f"Unsupported file type for file {filename}. Skipping.")
+            logger.warning(f"send_file: Unsupported file type for file {filename}. Skipping.")
             return False
 
         response = requests.post(url + method, data=data, files=files, timeout=60)

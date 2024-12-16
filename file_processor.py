@@ -24,7 +24,7 @@ def process_file(filepath):
     logger.debug(f"Detected file type: {file_type}")
 
     if not file_type:
-        logger.warning(f"Unsupported file type for file {filename}. Skipping.")
+        logger.warning(f"process_file: Unsupported file type for file {filename}. Skipping.")
         return
 
     if file_type in ['photo']:
