@@ -11,6 +11,9 @@ def send_file(filepath, file_type, filename):
     Sends a file via Telegram using HTTP requests.
     Returns True if successful, False otherwise.
     """
+    
+    logger.debug(f"send_file called with: {filename}, file_type: {file_type}")
+    
     try:
         url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/'
 

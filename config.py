@@ -22,7 +22,8 @@ FILES_DIRECTORY = os.getenv('FILES_DIRECTORY', '/path/to/files/')
 PROCESSED_DIRECTORY = os.getenv('PROCESSED_DIRECTORY', '/path/to/processed/')
 FAILED_DIRECTORY = os.getenv('FAILED_DIRECTORY', '/path/to/failed/')
 
-# Application log file
+# Application logging
+LOG_LEVEL = 'debug'
 APP_LOG_FILE = os.getenv('APP_LOG_FILE', 'app.log')
 
 # Retry settings

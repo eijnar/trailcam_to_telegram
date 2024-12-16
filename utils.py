@@ -2,11 +2,11 @@ import sys
 import os
 import logging
 from logging.handlers import RotatingFileHandler
-from config import APP_LOG_FILE, PHOTO_EXTENSIONS, VIDEO_EXTENSIONS
+from config import APP_LOG_FILE, PHOTO_EXTENSIONS, VIDEO_EXTENSIONS, LOG_LEVEL
 
 # Set up logging
 logger = logging.getLogger('FileSender')
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.LOG_LEVEL)
 
 # Create handlers
 file_handler = RotatingFileHandler(APP_LOG_FILE, maxBytes=5*1024*1024, backupCount=5)
