@@ -7,6 +7,7 @@ from elasticsearch_client import ingest_metadata
 from telegram_client import send_file
 from file_organizer import organize_file
 from config import FILES_DIRECTORY, MAX_RETRIES
+from device_coordinates import DEVICE_COORDINATES
 
 
 def process_file(filepath):
@@ -32,6 +33,14 @@ def process_file(filepath):
         logger.info(f"Extracting metadata for photo file: {filename}")
         gps_coords = extract_gps(filepath)
         timestamp_taken = extract_timestamp(filepath)
+
+        if not gps_coords:
+            gps_coords = DEVICE_COORDINATES.get(device_id)
+            if gps_coords:
+                logger.info(f"No GPS data found in image. Using fallback coordinates for device {device_id}: {gps_coords}")
+            else:
+                logger.warning(f"No GPS data and no fallback coordinates for device {device_id}. Skipping ingestion.")
+                return
 
         # Ensure timestamp_taken has a value
         if not timestamp_taken:
