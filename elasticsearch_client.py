@@ -39,11 +39,16 @@ def create_index():
         }
     }
 
-    # if not es.indices.exists(index=ELASTICSEARCH_INDEX):
-    #     es.indices.create(index=ELASTICSEARCH_INDEX, body=mapping)
-    #     logger.info(f"Created Elasticsearch index: {ELASTICSEARCH_INDEX}")
-    # else:
-    #     logger.info(f"Elasticsearch index already exists: {ELASTICSEARCH_INDEX}")
+    try:
+        logger.debug(f"Checking if index '{ELASTICSEARCH_INDEX}' exists.")
+        if not es.indices.exists(index=ELASTICSEARCH_INDEX):
+            logger.debug(f"Creating index '{ELASTICSEARCH_INDEX}' with mapping: {mapping}")
+            es.indices.create(index=ELASTICSEARCH_INDEX, body=mapping)
+            logger.info(f"Created Elasticsearch index: {ELASTICSEARCH_INDEX}")
+        else:
+            logger.info(f"Elasticsearch index already exists: {ELASTICSEARCH_INDEX}")
+    except Exception as e:
+        logger.error(f"Error creating Elasticsearch index: {e}")
 
 def ingest_metadata(device_id, gps_coords, timestamp_taken, filename):
     """Ingest ECS-compliant metadata into Elasticsearch."""
